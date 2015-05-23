@@ -13,7 +13,7 @@ Six young health participants were asked to perform one set of 10 repetitions of
 
 Class A corresponds to the specified execution of the exercise, while the other 4 classes correspond to common mistakes. Participants were supervised by an experienced weight lifter to make sure the execution complied to the manner they were supposed to simulate. The exercises were performed by six male participants aged between 20-28 years, with little weight lifting experience. We made sure that all participants could easily simulate the mistakes in a safe and controlled manner by using a relatively light dumbbell (1.25kg).
 
-
+This project uses machine learning (specifically bossted regression trees) to classify the type of lift being performed based on the exercise data from the wearable device.
 
 Read more: 
 
@@ -22,13 +22,13 @@ Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H. Qualitative Activ
 
 ##### Read in the data set
 
-The Rcode below calls the libraries that will be needed and then reads in the data from the website.
+The Rcode below calls the libraries that will be needed and then reads in the data.
 
-```{r , echo=TRUE, cache=TRUE}
-library(caret) 
-library(ggplot2)
-library(corrplot)
-library(RCurl)
+```{r , echo=TRUE, message=FALSE, cache=TRUE}
+suppressMessages(library(caret)) 
+suppressMessages(library(ggplot2))
+suppressMessages(library(corrplot))
+suppressMessages(library(RCurl))
 setwd("~/Coursera/Machine_learning")
 
 training <- read.csv("./data/pml-training.csv", header= TRUE,
@@ -38,10 +38,8 @@ training <- read.csv("./data/pml-training.csv", header= TRUE,
 
 ```
 
-#training data_set
 
-
-##### examine data set for missing variables, split into test and training
+##### Examine data set for missing variables, Clean data and then split into test and training
 
  The testing dataset on the website is only the 20 observations to test
  the classification datbase so for the purposes of testing the classification model that will be developed, the data set will be randomly split into test and training datasets with 60% in the training dataset.
@@ -60,14 +58,15 @@ df_clean <-training[,var_smry2]
 
 # create model variables
 modl_vars<-names(df_clean)[-which(names(df_clean) 
-                                      %in% names(df_clean)[1:7]
-)]
+                                      %in% names(df_clean)[1:7])]
                                  
 modl_df<- df_clean[,modl_vars]
 
+# split 60% into training, remaing 40% as test
 
 inTrain <- createDataPartition(y=df_clean$classe,
                                p=0.6, list=FALSE)
+
 training <- df_clean[inTrain,]
 testing <- df_clean[-inTrain,]
 
@@ -108,7 +107,7 @@ preProc
 
 The initial choice was to use a random forest algorithm but my PC only has 4G of RAM so itcould not handle random forest.
 
-The following code uses the gbm algorithm on the principal components that were just created above.  Please note  - I would have used 10 fold cross validation but ran into memory issues on my PC
+The following code uses the gbm algorithm on the principal components that were just created above. The gbm algorith is boosted regression trees.  This procedure attempts to minimize the error of the preceeding trees.   Please note  - I would have used 10 fold cross validation but ran into memory issues on my PC
 ```{r , echo=TRUE, cache=TRUE}
 cvCtrl <- trainControl(#5 fold cv 
                      method="repeatedcv", 
@@ -126,9 +125,31 @@ gbmFit1 <- train(training_modl$classe ~ ., data=trainPC,
                  method = "gbm",
                  trControl = cvCtrl,
                  verbose = FALSE)
+```
+##### Model Summary  and estimate of error
 
-conf_train_modl1<-confusionMatrix(training_modl$classe,predict(gbmFit1,trainPC))
+  The standard deviation of the model accurracy is 0.006 which shows that there is very little variability in the accuracy.  This is one of the advantages of using boosted regression trees. 
 
+
+```{r , echo=TRUE, cache=TRUE}
+print(gbmFit1)
+
+```
+
+
+##### Summary of Performance on Training data
+The accuracy of this model is 84%. I believe I could have improved the accuracy if it was able to be run with 10 fold cross validation instead of 5.  However to to RAM issues, 5 fold was the highest that could be run.
+
+
+```{r , echo=FALSE, cache=TRUE}
+conf_train_modl1<-
+        confusionMatrix(training_modl$classe,predict(gbmFit1,trainPC))
+conf_train_modl1
+```
+##### Summary of Performance on Test data.
+The accuracy on the test (holdout) data is 80% which is very close to the training data set accuracy.  This indicates that the model was not overfit.
+
+```{r , echo=FALSE, cache=TRUE}
 testPC <- predict(preProc,
                   testing_modl[,-which(names(testing_modl)
                                        %in% c("classe"))])
@@ -138,5 +159,6 @@ conf_test_modl1
 
 ```
 
-
+##### Conclusion 
+By using principal components to reduce the dimensionality of the data and then using boosted regression trees, the model was able to accurately predict the exercise method in 80% of the cases based on the exercise monitor data.  The acccuracy possible could have been improved by increasing the number of folds in the cross validation but the computer could not run it due to memory issues.
 
