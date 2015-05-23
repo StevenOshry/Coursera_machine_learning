@@ -1,0 +1,142 @@
+---
+title: Coursera Machine Learning Project - Use Machine Learning Algorithm to Classify
+  Exercise Method Based Wearable Fitness Tracker Data
+author: "Steven Oshry"
+date: "Sunday, May 24, 2015"
+output: html_document
+fontsize: 8pt
+---
+##### Overview 
+
+
+Six young health participants were asked to perform one set of 10 repetitions of the Unilateral Dumbbell Biceps Curl in five different fashions: exactly according to the specification (Class A), throwing the elbows to the front (Class B), lifting the dumbbell only halfway (Class C), lowering the dumbbell only halfway (Class D) and throwing the hips to the front (Class E).
+
+Class A corresponds to the specified execution of the exercise, while the other 4 classes correspond to common mistakes. Participants were supervised by an experienced weight lifter to make sure the execution complied to the manner they were supposed to simulate. The exercises were performed by six male participants aged between 20-28 years, with little weight lifting experience. We made sure that all participants could easily simulate the mistakes in a safe and controlled manner by using a relatively light dumbbell (1.25kg).
+
+
+
+Read more: 
+
+Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H. Qualitative Activity Recognition of Weight Lifting Exercises. Proceedings of 4th International Conference in Cooperation with SIGCHI (Augmented Human '13) . Stuttgart, Germany: ACM SIGCHI, 2013.
+
+
+##### Read in the data set
+
+The Rcode below calls the libraries that will be needed and then reads in the data from the website.
+
+```{r , echo=TRUE, cache=TRUE}
+library(caret) 
+library(ggplot2)
+library(corrplot)
+library(RCurl)
+setwd("~/Coursera/Machine_learning")
+
+training <- read.csv("./data/pml-training.csv", header= TRUE,
+                     sep=",", 
+                      na.strings = c("NA", "#DIV/0!","")
+                     )
+
+```
+
+#training data_set
+
+
+##### examine data set for missing variables, split into test and training
+
+ The testing dataset on the website is only the 20 observations to test
+ the classification datbase so for the purposes of testing the classification model that will be developed, the data set will be randomly split into test and training datasets with 60% in the training dataset.
+First, each column will be checked for missing data and only columns with fewer than 60% of missing observations will be kept
+
+
+```{r , echo=TRUE, cache=TRUE}
+
+#calculate % missing for each column
+
+var_smry<-  data.frame(colSums(is.na(training))/nrow(training))
+names(var_smry)[1]<-"pct_na"
+# keep only variables with < 60% missing obs
+var_smry2 <-c(row.names(subset(var_smry, pct_na<0.6)))
+df_clean <-training[,var_smry2]
+
+# create model variables
+modl_vars<-names(df_clean)[-which(names(df_clean) 
+                                      %in% names(df_clean)[1:7]
+)]
+                                 
+modl_df<- df_clean[,modl_vars]
+
+
+inTrain <- createDataPartition(y=df_clean$classe,
+                               p=0.6, list=FALSE)
+training <- df_clean[inTrain,]
+testing <- df_clean[-inTrain,]
+
+#keep only variables to model, getting rid of descriptors
+training_modl<-training[,modl_vars]
+testing_modl<-testing[,modl_vars]
+
+```
+##### Exploratory data Analysis , check Correlations
+In the the correlation plot shown below there are many high correlations.  Principal components is a way of reducing the dimensionality in the data while all the components are uncorrelated (orthogonal) to each other.
+
+
+```{r test, echo=FALSE,fig.width=9, fig.height = 5, fig.align='center'}
+options( warn = -1)
+#set warnings back to 0 to tun back on
+# see if any varaibles have high correlations
+library(corrplot)
+cor_mat <-cor(training_modl[,  names(training_modl)[1:20]] )
+
+corrplot(cor_mat,method="shade", shade.col=NA, tl.col="black", tl.srt=45)
+```
+
+##### Principal Component analysis
+
+Principal components is a way of reducing the dimensionality in the data while all the components are uncorrelated (orthogonal) to each other. The code below
+shows that 18 principal components explain 90% of the variance among the explanatory variables.
+
+
+```{r , echo=TRUE, cache=TRUE}
+
+set.seed(988889)
+preProc <- preProcess(training_modl[,  !names(training_modl) %in% c("classe")]
+                      ,method="pca",thresh=0.90)
+preProc
+
+```
+##### Machine learning algortihm to predict class of exercise (classe)  from data
+
+The initial choice was to use a random forest algorithm but my PC only has 4G of RAM so itcould not handle random forest.
+
+The following code uses the gbm algorithm on the principal components that were just created above.  Please note  - I would have used 10 fold cross validation but ran into memory issues on my PC
+```{r , echo=TRUE, cache=TRUE}
+cvCtrl <- trainControl(#5 fold cv 
+                     method="repeatedcv", 
+                     #repeat 1 times
+                     repeats=1, 
+                       number=5,
+                       classProbs=TRUE )
+trainPC <- predict(preProc,
+                   training_modl[,!names(training_modl)
+                                         %in% c("classe")])
+
+
+
+gbmFit1 <- train(training_modl$classe ~ ., data=trainPC,
+                 method = "gbm",
+                 trControl = cvCtrl,
+                 verbose = FALSE)
+
+conf_train_modl1<-confusionMatrix(training_modl$classe,predict(gbmFit1,trainPC))
+
+testPC <- predict(preProc,
+                  testing_modl[,-which(names(testing_modl)
+                                       %in% c("classe"))])
+
+conf_test_modl1<-confusionMatrix(testing_modl$classe,predict(gbmFit1,testPC))
+conf_test_modl1
+
+```
+
+
+
